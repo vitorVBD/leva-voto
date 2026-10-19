@@ -322,8 +322,8 @@ export function FluxoEleitor() {
               uf={uf}
               error={dados.formState.errors.uf && !uf ? undefined : dados.formState.errors.municipio?.message}
             />
-            <TextField label="Zona" inputMode="numeric" error={dados.formState.errors.zona?.message} {...dados.register("zona")} />
             <TextField label="Seção" inputMode="numeric" error={dados.formState.errors.secao?.message} {...dados.register("secao")} />
+            <TextField label="Zona" inputMode="numeric" error={dados.formState.errors.zona?.message} {...dados.register("zona")} />
             <Actions>
               <Button type="submit" busy={busy}>
                 Buscar local

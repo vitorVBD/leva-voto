@@ -10,6 +10,7 @@ import { Secao } from '../domain/types';
 export const ZIP_URL =
   'https://cdn.tse.jus.br/estatistica/sead/odsele/eleitorado_locais_votacao/eleitorado_local_votacao_2026.zip';
 export const ZIP_BYTES = 178_122_072;
+export const ZIP_MINIMO = 150_000_000;
 function cacheDir(): string {
   return process.env.TSE_CACHE_DIR
     ? path.resolve(process.env.TSE_CACHE_DIR)
@@ -228,7 +229,7 @@ async function garantirZip(): Promise<string> {
   let estavel = 0;
   while (Date.now() < prazo) {
     const bytes = await tamanho(zipPath());
-    if (bytes >= ZIP_BYTES) return zipPath();
+    if (bytes >= ZIP_MINIMO) return zipPath();
     if (bytes === 0) break;
     if (bytes === ultimo) estavel += 1;
     else estavel = 0;
@@ -236,22 +237,30 @@ async function garantirZip(): Promise<string> {
     if (estavel >= 3) break;
     await esperar(2000);
   }
-  if ((await tamanho(zipPath())) >= ZIP_BYTES) return zipPath();
+  if ((await tamanho(zipPath())) >= ZIP_MINIMO) return zipPath();
   const parcial = `${zipPath()}.part`;
+  await baixarZipEm(parcial);
+  await rename(parcial, zipPath());
+  return zipPath();
+}
+
+export async function baixarZipEm(destino: string): Promise<void> {
   const response = await fetch(ZIP_URL, { signal: AbortSignal.timeout(300_000) });
   if (!response.ok || !response.body) throw new Error('Não foi possível baixar a base de locais do TSE.');
-  const destino = createWriteStream(parcial);
+  const esperado = Number(response.headers.get('content-length') || 0);
+  const arquivo = createWriteStream(destino);
   const reader = response.body.getReader();
   while (true) {
     const chunk = await reader.read();
     if (chunk.done) break;
-    if (!destino.write(Buffer.from(chunk.value))) await once(destino, 'drain');
+    if (!arquivo.write(Buffer.from(chunk.value))) await once(arquivo, 'drain');
   }
-  destino.end();
-  await once(destino, 'finish');
-  if ((await tamanho(zipPath())) < ZIP_BYTES) await rename(parcial, zipPath());
-  if ((await tamanho(zipPath())) < ZIP_BYTES) throw new Error('O download da base do TSE ficou incompleto.');
-  return zipPath();
+  arquivo.end();
+  await once(arquivo, 'finish');
+  const gravado = await tamanho(destino);
+  if ((esperado > 0 && gravado !== esperado) || gravado < ZIP_MINIMO) {
+    throw new Error(`O download da base do TSE ficou incompleto: ${gravado} de ${esperado || ZIP_MINIMO} bytes.`);
+  }
 }
 
 function esperar(ms: number): Promise<void> {

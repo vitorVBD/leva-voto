@@ -24,10 +24,29 @@ const display = Archivo({
   display: "swap",
 });
 
+const siteUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
+  ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+  : process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : "http://localhost:3000";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "Leva Voto — Até a porta da seção",
   description: "Encontre sua seção eleitoral e peça ajuda para chegar, com privacidade.",
   applicationName: "Leva Voto",
+  openGraph: {
+    title: "Leva Voto — Até a porta da seção",
+    description: "Encontre sua seção eleitoral e peça ajuda para chegar, com privacidade.",
+    siteName: "Leva Voto",
+    locale: "pt_BR",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Leva Voto — Até a porta da seção",
+    description: "Encontre sua seção eleitoral e peça ajuda para chegar, com privacidade.",
+  },
 };
 
 export const viewport: Viewport = {

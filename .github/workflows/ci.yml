@@ -12,6 +12,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npx prisma generate
+        env:
+          DATABASE_URL: postgresql://leva:leva@localhost:5432/leva_voto
+      - run: npm test
       - run: npm run build
         env:
-          NEXT_PUBLIC_API_URL: http://localhost:3001
+          DATABASE_URL: postgresql://leva:leva@localhost:5432/leva_voto

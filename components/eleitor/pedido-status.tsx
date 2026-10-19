@@ -2,11 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { io } from "socket.io-client";
 import { Orientacao } from "@/components/orientacao";
 import { Shell } from "@/components/shell";
 import { acessoHeaders, guardarPedido, lerPedido } from "@/lib/acesso";
-import { API_URL, api, PedidoView } from "@/lib/api";
+import { api, PedidoView } from "@/lib/api";
 import { TextField } from "@/components/choices";
 import { Actions, Banner, Body, Button, Card } from "@/lib/design";
 import { AJUDA_LABEL, FAIXAS, STATUS_LABEL } from "@/lib/labels";
@@ -39,13 +38,9 @@ export function PedidoStatus() {
         });
     void load();
     const timer = setInterval(() => void load(), 5000);
-    const socket = io(API_URL, { transports: ["websocket"] });
-    socket.emit("identificar", { papel: "pedido", id, segredo: acesso });
-    socket.on("pedido:atualizado", (view: PedidoView) => setPedido(view));
     return () => {
       stop = true;
       clearInterval(timer);
-      socket.close();
     };
   }, [id, acesso]);
 

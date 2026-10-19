@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 const appDir = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ["@prisma/client", "prisma", "yauzl"],
   experimental: {
     agentFeedback: true,
   },

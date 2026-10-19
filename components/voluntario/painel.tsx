@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { io } from "socket.io-client";
 import { Shell } from "@/components/shell";
 import { acessoHeaders, guardarVoluntario, lerVoluntario } from "@/lib/acesso";
-import { API_URL, api, Atendimento, Preview, VoluntarioResumo } from "@/lib/api";
+import { api, Atendimento, Preview, VoluntarioResumo } from "@/lib/api";
 import { TextField } from "@/components/choices";
 import { Actions, Banner, Body, Button, Card } from "@/lib/design";
 import { AJUDA_LABEL, DIFICULDADES, FAIXAS, STATUS_LABEL } from "@/lib/labels";
@@ -46,29 +45,25 @@ export function PainelVoluntario() {
         const headers = acessoHeaders(acesso);
         const [pessoa, fila] = await Promise.all([
           api<VoluntarioResumo>(`/api/voluntarios/${id}`, { headers }),
-          api<{ chamados: Preview[]; atendimento: Atendimento | null }>(`/api/voluntarios/${id}/chamados`, { headers }),
+          api<{ chamados: Preview[]; atendimento: Atendimento | null; aviso: string | null }>(
+            `/api/voluntarios/${id}/chamados`,
+            { headers },
+          ),
         ]);
         if (stop) return;
         setResumo(pessoa);
         setChamados(fila.chamados);
         setAtendimento(fila.atendimento);
+        if (fila.aviso) setAviso(fila.aviso);
       } catch (error) {
         if (!stop) setErro(error instanceof Error ? error.message : "Não foi possível carregar o painel.");
       }
     };
     void load();
     const timer = setInterval(() => void load(), 8000);
-    const socket = io(API_URL, { transports: ["websocket"] });
-    socket.emit("identificar", { papel: "voluntario", id, segredo: acesso });
-    socket.on("chamado:novo", () => void load());
-    socket.on("chamado:perdido", (payload: { mensagem: string }) => {
-      setAviso(payload.mensagem);
-      void load();
-    });
     return () => {
       stop = true;
       clearInterval(timer);
-      socket.close();
     };
   }, [id, acesso]);
 

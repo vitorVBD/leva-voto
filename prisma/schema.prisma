@@ -1,0 +1,202 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrderStatus {
+  Aberto
+  Buscando
+  SemVoluntario
+  Aceito
+  EmAndamento
+  Concluido
+  Cancelado
+}
+
+enum DificuldadeLocomocao {
+  cadeira_de_rodas
+  andador
+  baixa_visao
+  acompanhante
+}
+
+enum TipoAjuda {
+  orientacao_detalhada
+  acompanhante_a_pe
+  carona
+}
+
+enum TipoVeiculo {
+  carro
+  moto
+}
+
+enum StatusAprovacao {
+  pendente
+  aprovado
+  recusado
+}
+
+enum FaixaHorario {
+  manha
+  tarde
+  fim_de_tarde
+}
+
+enum OfertaStatus {
+  pendente
+  aceita
+  recusada
+  expirada
+  perdida
+}
+
+model EleitorSession {
+  id                String   @id @default(uuid()) @db.Uuid
+  latitude          Float?
+  longitude         Float?
+  cep               String?
+  enderecoOrigem    String?  @map("endereco_origem")
+  uf                String
+  municipio         String
+  zona              String
+  secao             String
+  localVotacao      String   @map("local_votacao")
+  enderecoVotacao   String   @map("endereco_votacao")
+  bairroVotacao     String   @map("bairro_votacao")
+  latitudeVotacao   Float    @map("latitude_votacao")
+  longitudeVotacao  Float    @map("longitude_votacao")
+  acessibilidade    String
+  criadoEm          DateTime @default(now()) @map("criado_em")
+  pedidos           Pedido[]
+
+  @@map("eleitor_sessoes")
+}
+
+model Pedido {
+  id                    String                 @id @default(uuid()) @db.Uuid
+  eleitorId             String                 @map("eleitor_id") @db.Uuid
+  eleitor               EleitorSession         @relation(fields: [eleitorId], references: [id])
+  nomeEleitor           String                 @map("nome_eleitor")
+  contatoEleitor        String                 @map("contato_eleitor")
+  aceiteLgpd            Boolean                @map("aceite_lgpd")
+  aceiteLgpdEm          DateTime               @map("aceite_lgpd_em")
+  termoVersao           String                 @map("termo_versao")
+  dificuldadesLocomocao DificuldadeLocomocao[] @map("dificuldades_locomocao")
+  tipoAjuda             TipoAjuda              @map("tipo_ajuda")
+  status                OrderStatus            @default(Aberto)
+  veiculoAceito         TipoVeiculo?           @map("veiculo_aceito")
+  faixaHorario          FaixaHorario?          @map("faixa_horario")
+  pontoLat              Float?                 @map("ponto_lat")
+  pontoLng              Float?                 @map("ponto_lng")
+  pontoEndereco         String?                @map("ponto_endereco")
+  pontoBairro           String?                @map("ponto_bairro")
+  voluntarioId          String?                @map("voluntario_id") @db.Uuid
+  voluntario            Voluntario?            @relation(fields: [voluntarioId], references: [id])
+  raioAtualKm           Float                  @default(2) @map("raio_atual_km")
+  wave                  Int                    @default(0)
+  expiraEm              DateTime?              @map("expira_em")
+  motivoCancelamento    String?                @map("motivo_cancelamento")
+  mobilidadeExpurgadaEm DateTime?              @map("mobilidade_expurgada_em")
+  dadosExpurgadosEm     DateTime?              @map("dados_expurgados_em")
+  acessoHash            String                 @map("acesso_hash")
+  criadoEm              DateTime               @default(now()) @map("criado_em")
+  atualizadoEm          DateTime               @updatedAt @map("atualizado_em")
+  ofertas               Oferta[]
+  avaliacoes            Avaliacao[]
+
+  @@index([status])
+  @@index([voluntarioId])
+  @@map("pedidos")
+}
+
+model Voluntario {
+  id                      String          @id @default(uuid()) @db.Uuid
+  nome                    String
+  cpf                     String          @unique
+  telefone                String          @unique
+  email                   String
+  telefoneConfirmado      Boolean         @default(false) @map("telefone_confirmado")
+  termoCondutaAceito      Boolean         @default(false) @map("termo_conduta_aceito")
+  termoCondutaEm          DateTime?       @map("termo_conduta_em")
+  latitude                Float
+  longitude               Float
+  bairro                  String?
+  raioMaximoKm            Float           @map("raio_maximo_km")
+  tiposAjudaOferecidos    TipoAjuda[]     @map("tipos_ajuda_oferecidos")
+  ofereceCarona           Boolean         @default(false) @map("oferece_carona")
+  tipoVeiculo             TipoVeiculo?    @map("tipo_veiculo")
+  veiculoAdaptado         Boolean         @default(false) @map("veiculo_adaptado")
+  disponibilidadeHorarios FaixaHorario[]  @map("disponibilidade_horarios")
+  statusAprovacao         StatusAprovacao @default(pendente) @map("status_aprovacao")
+  ativo                   Boolean         @default(false)
+  notaMedia               Float           @default(0) @map("nota_media")
+  totalAvaliacoes         Int             @default(0) @map("total_avaliacoes")
+  acessoHash              String          @map("acesso_hash")
+  criadoEm                DateTime        @default(now()) @map("criado_em")
+  pedidos                 Pedido[]
+  ofertas                 Oferta[]
+  avaliacoes              Avaliacao[]
+
+  @@map("voluntarios")
+}
+
+model Oferta {
+  id           String       @id @default(uuid()) @db.Uuid
+  pedidoId     String       @map("pedido_id") @db.Uuid
+  pedido       Pedido       @relation(fields: [pedidoId], references: [id])
+  voluntarioId String       @map("voluntario_id") @db.Uuid
+  voluntario   Voluntario   @relation(fields: [voluntarioId], references: [id])
+  wave         Int
+  status       OfertaStatus
+  expiraEm     DateTime     @map("expira_em")
+  criadoEm     DateTime     @default(now()) @map("criado_em")
+
+  @@index([pedidoId])
+  @@index([voluntarioId])
+  @@map("ofertas")
+}
+
+model Avaliacao {
+  id           String     @id @default(uuid()) @db.Uuid
+  pedidoId     String     @unique @map("pedido_id") @db.Uuid
+  pedido       Pedido     @relation(fields: [pedidoId], references: [id])
+  voluntarioId String     @map("voluntario_id") @db.Uuid
+  voluntario   Voluntario @relation(fields: [voluntarioId], references: [id])
+  nota         Int
+  comentario   String?
+  criadoEm     DateTime   @default(now()) @map("criado_em")
+
+  @@map("avaliacoes")
+}
+
+model SecaoEleitoral {
+  id             String @id
+  uf             String
+  municipio      String
+  zona           String
+  secao          String
+  local          String
+  endereco       String
+  bairro         String
+  latitude       Float
+  longitude      Float
+  acessibilidade String
+
+  @@unique([uf, municipio, zona, secao])
+  @@index([uf])
+  @@map("secoes_eleitorais")
+}
+
+model CodigoTelefone {
+  telefone      String    @id
+  hash          String
+  expiraEm      DateTime  @map("expira_em")
+  confirmadoAte DateTime? @map("confirmado_ate")
+
+  @@map("codigos_telefone")
+}

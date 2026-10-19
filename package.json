@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "tsx server/scripts/importar-locais.ts && next build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
@@ -36,6 +36,7 @@
     "eslint-config-next": "16.4.2",
     "prisma": "^6.19.0",
     "tailwindcss": "^4",
+    "tsx": "^4.20.6",
     "typescript": "^5",
     "vitest": "^3.2.4"
   }

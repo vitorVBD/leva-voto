@@ -29,7 +29,9 @@ async function boot(): Promise<App> {
   new PurgeScheduler(store, config).start();
   const api = new Api(store, config, engine);
   api.observar(events);
-  const { garantirIndice } = await import("./data/locais-tse");
-  void garantirIndice().catch(() => undefined);
+  if (!config.databaseUrl) {
+    const { garantirIndice } = await import("./data/locais-tse");
+    void garantirIndice().catch(() => undefined);
+  }
   return { api };
 }

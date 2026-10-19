@@ -192,6 +192,30 @@ model SecaoEleitoral {
   @@map("secoes_eleitorais")
 }
 
+model LocalVotacao {
+  chave          String @id
+  uf             String
+  municipio      String
+  zona           String
+  secao          String
+  local          String
+  endereco       String
+  bairro         String
+  latitude       Float
+  longitude      Float
+  acessibilidade String
+
+  @@map("locais_votacao")
+}
+
+model MunicipioCentroide {
+  chave     String @id
+  latitude  Float
+  longitude Float
+
+  @@map("municipio_centroides")
+}
+
 model CodigoTelefone {
   telefone      String    @id
   hash          String

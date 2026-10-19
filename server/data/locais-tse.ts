@@ -7,9 +7,9 @@ import yauzl from 'yauzl';
 import { chaveSecao, chaveTexto } from '../domain/geo';
 import { Secao } from '../domain/types';
 
-const ZIP_URL =
+export const ZIP_URL =
   'https://cdn.tse.jus.br/estatistica/sead/odsele/eleitorado_locais_votacao/eleitorado_local_votacao_2026.zip';
-const ZIP_BYTES = 178_122_072;
+export const ZIP_BYTES = 178_122_072;
 function cacheDir(): string {
   return process.env.TSE_CACHE_DIR
     ? path.resolve(process.env.TSE_CACHE_DIR)
@@ -52,8 +52,21 @@ export function garantirIndice(): Promise<Indice> {
 }
 
 export async function buscarSecaoOficial(filtro: FiltroSecao): Promise<Secao | null> {
+  if (process.env.DATABASE_URL) {
+    const { buscarLocal } = await import('./locais-db');
+    return buscarLocal(filtro);
+  }
   const indice = await garantirIndice();
   return indice.secoes.get(chaveSecao(filtro.uf, filtro.municipio, filtro.zona, filtro.secao)) ?? null;
+}
+
+export async function centroideOficial(uf: string, municipio: string): Promise<{ lat: number; lng: number } | null> {
+  if (process.env.DATABASE_URL) {
+    const { centroideNoBanco } = await import('./locais-db');
+    return centroideNoBanco(uf, municipio);
+  }
+  if (!atual) return null;
+  return atual.centroides.get(`${uf.toUpperCase()}|${chaveTexto(municipio)}`) ?? null;
 }
 
 export function centroideCarregado(uf: string, municipio: string): { lat: number; lng: number } | null {
@@ -351,10 +364,75 @@ function lerCsv(
   });
 }
 
+type Acumulado = {
+  secoes: Map<string, Secao>;
+  turnos: Map<string, number>;
+  somas: Map<string, { lat: number; lng: number; n: number }>;
+};
+
+function acumular(): Acumulado {
+  return { secoes: new Map(), turnos: new Map(), somas: new Map() };
+}
+
+function incluir(acc: Acumulado, registro: Registro): void {
+  const chave = chaveSecao(registro.uf, registro.municipio, registro.zona, registro.secao);
+  const turnoAnterior = acc.turnos.get(chave) ?? 0;
+  const anterior = acc.secoes.get(chave);
+  if (turnoAnterior > registro.turno) return;
+  if (turnoAnterior === registro.turno && anterior && anterior.latitude !== 0 && registro.lat == null) return;
+  acc.turnos.set(chave, registro.turno);
+  acc.secoes.set(chave, paraSecao(registro));
+  if (registro.lat != null && registro.lng != null) {
+    const centro = `${registro.uf}|${chaveTexto(registro.municipio)}`;
+    const soma = acc.somas.get(centro) ?? { lat: 0, lng: 0, n: 0 };
+    soma.lat += registro.lat;
+    soma.lng += registro.lng;
+    soma.n += 1;
+    acc.somas.set(centro, soma);
+  }
+}
+
+function finalizar(acc: Acumulado): Indice {
+  for (const secao of acc.secoes.values()) {
+    if (secao.latitude !== 0 || secao.longitude !== 0) continue;
+    const soma = acc.somas.get(`${secao.uf}|${chaveTexto(secao.municipio)}`);
+    if (!soma || soma.n === 0) continue;
+    secao.latitude = soma.lat / soma.n;
+    secao.longitude = soma.lng / soma.n;
+  }
+  const centroides = new Map<string, { lat: number; lng: number }>();
+  for (const [chave, soma] of acc.somas) {
+    centroides.set(chave, { lat: soma.lat / soma.n, lng: soma.lng / soma.n });
+  }
+  return { secoes: acc.secoes, centroides };
+}
+
+export async function indiceAPartirDoZip(zip: string): Promise<Indice> {
+  const membros = await listarZip(zip);
+  const csv = membros.find((nome) => /brasil\.csv$/i.test(nome));
+  if (!csv) throw new Error('O arquivo do TSE não trouxe o CSV nacional de locais de votação.');
+  const acc = acumular();
+  const progresso = { header: null as string[] | null, linhas: 0 };
+  await lerCsv(zip, csv, 'latin1', (line) => {
+    const limpa = line.replace(/^\uFEFF/, '').trim();
+    if (!limpa) return;
+    if (!progresso.header) {
+      progresso.header = parseCsvLine(limpa).map((coluna) => coluna.replace(/^\uFEFF/, '').trim());
+      return;
+    }
+    const registro = registroDeLinha(progresso.header, limpa);
+    if (!registro) return;
+    progresso.linhas += 1;
+    incluir(acc, registro);
+  });
+  if (!progresso.header?.includes('NM_LOCAL_VOTACAO') || progresso.linhas < 1000) {
+    throw new Error('A base de locais do TSE veio incompleta.');
+  }
+  return finalizar(acc);
+}
+
 async function carregarTsv(): Promise<Indice> {
-  const secoes = new Map<string, Secao>();
-  const turnos = new Map<string, number>();
-  const somas = new Map<string, { lat: number; lng: number; n: number }>();
+  const acc = acumular();
   const linhas = readline.createInterface({
     input: createReadStream(indicePath(), { encoding: 'utf8' }),
     crlfDelay: Infinity,
@@ -363,7 +441,7 @@ async function carregarTsv(): Promise<Indice> {
     if (!line) continue;
     const [uf, municipio, zona, secao, local, endereco, bairro, lat, lng, acessibilidade, turno] = line.split('\t');
     if (!uf || !municipio || !zona || !secao) continue;
-    const registro: Registro = {
+    incluir(acc, {
       uf,
       municipio,
       zona,
@@ -375,33 +453,7 @@ async function carregarTsv(): Promise<Indice> {
       lng: lng ? Number(lng) : null,
       acessibilidade: acessibilidade || 'Acessibilidade não detalhada na base aberta do TSE. Confirme no local.',
       turno: Number(turno) || 1,
-    };
-    const chave = chaveSecao(uf, municipio, zona, secao);
-    const turnoAnterior = turnos.get(chave) ?? 0;
-    const anterior = secoes.get(chave);
-    if (turnoAnterior > registro.turno) continue;
-    if (turnoAnterior === registro.turno && anterior && anterior.latitude !== 0 && registro.lat == null) continue;
-    turnos.set(chave, registro.turno);
-    secoes.set(chave, paraSecao(registro));
-    if (registro.lat != null && registro.lng != null) {
-      const centro = `${uf}|${chaveTexto(municipio)}`;
-      const soma = somas.get(centro) ?? { lat: 0, lng: 0, n: 0 };
-      soma.lat += registro.lat;
-      soma.lng += registro.lng;
-      soma.n += 1;
-      somas.set(centro, soma);
-    }
+    });
   }
-  for (const secao of secoes.values()) {
-    if (secao.latitude !== 0 || secao.longitude !== 0) continue;
-    const soma = somas.get(`${secao.uf}|${chaveTexto(secao.municipio)}`);
-    if (!soma || soma.n === 0) continue;
-    secao.latitude = soma.lat / soma.n;
-    secao.longitude = soma.lng / soma.n;
-  }
-  const centroides = new Map<string, { lat: number; lng: number }>();
-  for (const [chave, soma] of somas) {
-    centroides.set(chave, { lat: soma.lat / soma.n, lng: soma.lng / soma.n });
-  }
-  return { secoes, centroides };
+  return finalizar(acc);
 }

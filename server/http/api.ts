@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { z } from "zod";
 import { AppConfig } from "../config";
 import { listarMunicipiosIbge } from "../data/ibge";
-import { buscarSecaoOficial, centroideCarregado } from "../data/locais-tse";
+import { buscarSecaoOficial, centroideOficial } from "../data/locais-tse";
 import { centroideDe } from "../data/secoes";
 import { treDe } from "../data/tre";
 import { DomainError } from "../domain/errors";
@@ -227,7 +227,7 @@ export class Api {
       if (data.erro || !data.localidade || !data.uf) {
         throw new HttpError("CEP não encontrado. Digite o endereço.", 404);
       }
-      const centro = centroideCarregado(data.uf, data.localidade) ?? centroideDe(data.uf, data.localidade);
+      const centro = (await centroideOficial(data.uf, data.localidade)) ?? centroideDe(data.uf, data.localidade);
       const endereco = [data.logradouro, data.bairro, data.localidade, data.uf].filter(Boolean).join(", ");
       return {
         cep: digits,
